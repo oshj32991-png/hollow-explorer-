@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>The Lost Ruins - 遺忘的遺跡 (終極視覺版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Noto+Serif+TC:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0; padding: 0; overflow: hidden;
+            background-color: #010409; /* 深邃的虛空黑 */
+            font-family: 'Noto Serif TC', serif;
+            touch-action: none;
+            user-select: none; -webkit-user-select: none;
+        }
+        #game-container {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+        }
+        canvas {
+            display: block; width: 100%; height: 100%;
+        }
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; display: flex; flex-direction: column; justify-content: space-between;
+        }
+        #hud { padding: 20px 30px; display: flex; gap: 15px; align-items: center; }
+        
+        /* 仿空洞騎士的靈魂面具 UI */
+        .mask-container { display: flex; gap: 8px; }
+        .soul-mask {
+            width: 30px; height: 35px;
+            background: #e0e6ed;
+            border-radius: 40% 40% 50% 50% / 60% 60% 40% 40%;
+            position: relative;
+            box-shadow: 0 0 15px rgba(224, 230, 237, 0.6), inset 0 0 10px rgba(0,0,0,0.3);
+            transition: all 0.3s ease;
+        }
+        .soul-mask::before, .soul-mask::after { /* 眼睛 */
+            content: ''; position: absolute; top: 12px; width: 6px; height: 10px;
+            background: #000; border-radius: 50%;
+        }
+        .soul-mask::before { left: 6px; transform: rotate(15deg); }
+        .soul-mask::after { right: 6px; transform: rotate(-15deg); }
+        
+        .soul-mask.empty {
+            background: #1a2233; box-shadow: inset 0 0 15px rgba(0,0,0,0.8);
+        }
+        .soul-mask.empty::before, .soul-mask.empty::after { background: #0b0f17; }
+
+        .mobile-controls {
+            padding: 20px 40px 30px 40px;
+            display: flex; justify-content: space-between; align-items: flex-end;
+            pointer-events: auto;
+        }
+        .d-pad, .action-buttons { display: flex; gap: 15px; }
+        .ctrl-btn {
+            width: 70px; height: 70px;
+            background: rgba(20, 30, 48, 0.5);
+            border: 1px solid rgba(136, 170, 206, 0.3);
+            border-radius: 50%;
+            color: rgba(224, 230, 237, 0.8);
+            font-size: 26px;
+            display: flex; justify-content: center; align-items: center;
+            backdrop-filter: blur(5px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            transition: all 0.1s;
+        }
+        .ctrl-btn:active {
+            background: rgba(136, 170, 206, 0.4);
+            transform: scale(0.9); box-shadow: 0 0 20px rgba(136, 170, 206, 0.6);
+        }
+        
+        #screens {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle at center, rgba(11, 20, 38, 0.9) 0%, #010409 100%);
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            pointer-events: auto; z-index: 10;
+        }
+        .hidden { display: none !important; opacity: 0; pointer-events: none;}
+        
+        /* 增加淡入動畫 */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        #game-over-screen, #victory-screen {
+            animation: fadeIn 1.5s ease-in forwards;
+        }
+
+        .title-text {
+            font-family: 'Cinzel', serif; color: #fff; font-size: 4.5rem;
+            text-shadow: 0 0 30px rgba(136, 170, 206, 0.8), 0 0 10px rgba(255,255,255,0.5);
+            letter-spacing: 12px; margin-bottom: 5px;
+        }
+        
+        /* You Died 專屬文字樣式 */
+        .die-text {
+            font-family: 'Cinzel', serif; 
+            color: #fff; 
+            font-size: 6rem; /* 稍微放大 */
+            text-shadow: 0 0 40px rgba(255, 255, 255, 0.8), 0 0 15px rgba(255,255,255,0.5);
+            letter-spacing: 20px; 
+            margin-bottom: 30px;
+            text-transform: uppercase;
+        }
+
+        .subtitle-text {
+            color: #88aace; font-size: 1.2rem; letter-spacing: 15px; margin-bottom: 50px; text-indent: 15px;
+        }
+        .game-btn {
+            background: transparent; border: 1px solid #88aace; color: #88aace;
+            padding: 15px 50px; font-size: 20px; font-family: 'Noto Serif TC', serif;
+            cursor: pointer; letter-spacing: 6px; transition: all 0.4s;
+            position: relative; overflow: hidden;
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+        }
+        .game-btn::before {
+            content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(136, 170, 206, 0.2), transparent);
+            transition: left 0.5s;
+        }
+        .game-btn:hover::before { left: 100%; }
+        .game-btn:hover { background: #88aace; color: #010409; box-shadow: 0 0 25px #88aace; }
+        
+        /* 重新開始按鈕特殊樣式 */
+        .restart-btn {
+            border-color: #fff;
+            color: #fff;
+            margin-top: 40px;
+        }
+        .restart-btn:hover { background: #fff; color: #000; box-shadow: 0 0 25px #fff; }
+
+        /* 右上角遊戲中重新開始按鈕 */
+        .ingame-restart-btn {
+            position: absolute; top: 20px; right: 30px;
+            width: 45px; height: 45px;
+            background: rgba(11, 20, 38, 0.6);
+            border: 1px solid rgba(136, 170, 206, 0.4);
+            border-radius: 50%; display: flex; justify-content: center; align-items: center;
+            cursor: pointer; pointer-events: auto; color: #88aace;
+            transition: all 0.3s; backdrop-filter: blur(4px);
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+        .ingame-restart-btn:hover {
+            background: rgba(136, 170, 206, 0.3); color: #fff;
+            box-shadow: 0 0 15px rgba(136, 170, 206, 0.8); transform: rotate(-90deg);
+        }
+        .ingame-restart-btn:active { transform: scale(0.9) rotate(-90deg); }
+
+        @media (min-width: 1024px) { .mobile-controls { display: none; } }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui-layer">
+        <div id="hud">
+            <div class="mask-container">
+                <div class="soul-mask" id="hp-1"></div>
+                <div class="soul-mask" id="hp-2"></div>
+                <div class="soul-mask" id="hp-3"></div>
+                <div class="soul-mask" id="hp-4"></div>
+                <div class="soul-mask" id="hp-5"></div>
+            </div>
+        </div>
+        
+        <!-- 右上角隨時重新開始按鈕 -->
+        <div id="ingame-restart" class="ingame-restart-btn hidden" title="重新開始">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                <path d="M3 3v5h5"></path>
+            </svg>
+        </div>
+
+        <div class="mobile-controls">
+            <div class="d-pad">
+                <div class="ctrl-btn" id="btn-left">◄</div>
+                <div class="ctrl-btn" id="btn-right">►</div>
+            </div>
+            <div class="action-buttons">
+                <div class="ctrl-btn" id="btn-dash" style="font-size: 14px; font-weight: bold; font-family: sans-serif;">DASH</div>
+                <div class="ctrl-btn" id="btn-jump">▲</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="screens">
+        <div id="start-screen" class="text-center">
+            <h1 class="title-text">The Lost Ruins</h1>
+            <h2 class="subtitle-text">遺忘的遺跡</h2>
+            <button id="start-btn" class="game-btn">深入深淵</button>
+        </div>
+        
+        <div id="game-over-screen" class="text-center hidden" style="background: rgba(0,0,0,0.8); width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+            <h1 class="die-text">YOU DIED</h1>
+            <!-- 加入迴轉符號的重新開始按鈕 -->
+            <button id="restart-btn" class="game-btn restart-btn">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                    <path d="M3 3v5h5"></path>
+                </svg>
+                重新開始
+            </button>
+        </div>
+
+        <div id="victory-screen" class="text-center hidden" style="background: rgba(0,0,0,0.8); width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+            <h1 class="title-text" style="font-size: 4rem; color: #f1c40f; text-shadow: 0 0 50px rgba(241, 196, 15, 0.5);">JOURNEY'S END</h1>
+            <h2 class="subtitle-text" style="color: #f1c40f; letter-spacing: 8px;">您已抵達光之新月</h2>
+            <button id="win-restart-btn" class="game-btn" style="margin-top: 40px; border-color: #f1c40f; color: #f1c40f;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                    <path d="M3 3v5h5"></path>
+                </svg>
+                再次探索
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d', { alpha: false }); // 關閉 alpha 提升效能
+    
+    let VIEW_WIDTH, VIEW_HEIGHT;
+    function resize() {
+        VIEW_WIDTH = window.innerWidth;
+        VIEW_HEIGHT = window.innerHeight;
+        canvas.width = VIEW_WIDTH;
+        canvas.height = VIEW_HEIGHT;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // 鍵盤控制器
+    const keys = { right: false, left: false, up: false, justPressedUp: false, dash: false, justPressedDash: false };
+    
+    window.addEventListener('keydown', (e) => {
+        if(e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
+        if(e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
+        if(e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+            if (!keys.up) keys.justPressedUp = true;
+            keys.up = true;
+        }
+        if(e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+            if (!keys.dash) keys.justPressedDash = true;
+            keys.dash = true;
+        }
+    });
+    window.addEventListener('keyup', (e) => {
+        if(e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
+        if(e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
+        if(e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') keys.up = false;
+        if(e.code === 'ShiftLeft' || e.code === 'ShiftRight') keys.dash = false;
+    });
+
+    const bindBtn = (id, key, justPressedKey) => {
+        const btn = document.getElementById(id);
+        const press = (e) => { 
+            e.preventDefault(); 
+            if (justPressedKey && !keys[key]) keys[justPressedKey] = true;
+            keys[key] = true; 
+        };
+        const release = (e) => { e.preventDefault(); keys[key] = false; };
+        btn.addEventListener('touchstart', press, {passive: false});
+        btn.addEventListener('touchend', release);
+        btn.addEventListener('mousedown', press);
+        window.addEventListener('mouseup', release); 
+    };
+    bindBtn('btn-left', 'left');
+    bindBtn('btn-right', 'right');
+    bindBtn('btn-jump', 'up', 'justPressedUp');
+    bindBtn('btn-dash', 'dash', 'justPressedDash');
+
+    class Camera {
+        constructor() {
+            this.x = 0; this.y = 0;
+            this.shakeTimer = 0;
+        }
+        follow(target) {
+            // X軸：讓角色偏左，保留右方視野
+            let targetX = target.x - VIEW_WIDTH * 0.4;
+            // Y軸：讓角色偏下，保留上方跳躍視野與下方深淵預判
+            let targetY = target.y - VIEW_HEIGHT * 0.55;
+            
+            this.x += (targetX - this.x) * 0.08;
+            this.y += (targetY - this.y) * 0.08;
+        }
+        shake() { this.shakeTimer = 15; }
+        getOffsetX() { return this.x + (this.shakeTimer > 0 ? (Math.random()-0.5)*10 : 0); }
+        getOffsetY() { return this.y + (this.shakeTimer > 0 ? (Math.random()-0.5)*10 : 0); }
+        updateShake() { if (this.shakeTimer > 0) this.shakeTimer--; }
+    }
+    const camera = new Camera();
+
+    class Player {
+        constructor() {
+            this.x = 100;
+            this.y = 200;
+            this.width = 28;  
+            this.height = 44; 
+            
+            this.vx = 0; this.vy = 0;
+            this.speed = 5.5;
+            this.jumpForce = -12; 
+            this.gravity = 0.55;
+            this.fallMultiplier = 1.3; 
+            this.lowJumpMultiplier = 2.0; 
+            this.maxFallSpeed = 16;
+            
+            this.isGrounded = false;
+            this.direction = 1; 
+            
+            this.canDash = true;
+            this.isDashing = false;
+            this.dashTimer = 0;
+            this.dashDuration = 12;
+            this.dashSpeed = 14;
+
+            this.state = 'fall';
+            this.invulnerableTimer = 0;
+            this.maxHp = 5;
+            this.hp = this.maxHp;
+            this.animTimer = 0;
+            
+            this.trail = []; 
+        }
+
+        update() {
+            if (this.invulnerableTimer > 0) this.invulnerableTimer--;
+            this.animTimer += 0.2;
+
+            // 記錄殘影
+            if (this.isDashing || Math.abs(this.vx) > 3) {
+                if (this.animTimer % 1 < 0.3) this.trail.push({x: this.x, y: this.y, dir: this.direction, life: 1.0});
+            }
+            this.trail.forEach(t => t.life -= 0.1);
+            this.trail = this.trail.filter(t => t.life > 0);
+
+            // 衝刺邏輯
+            if (keys.justPressedDash && this.canDash && !this.isDashing) {
+                this.isDashing = true; this.canDash = false;
+                this.dashTimer = this.dashDuration; this.vy = 0; 
+                keys.justPressedDash = false; camera.shakeTimer = 4;
+                for(let i=0; i<8; i++) spawnParticle(this.x+this.width/2, this.y+this.height/2, '#fff', true);
+            }
+
+            if (this.isDashing) {
+                this.vx = this.direction * this.dashSpeed;
+                this.dashTimer--;
+                if (this.dashTimer <= 0) this.isDashing = false;
+            } else {
+                // 移動
+                if (keys.right) { this.vx = this.speed; this.direction = 1; }
+                else if (keys.left) { this.vx = -this.speed; this.direction = -1; }
+                else { this.vx *= this.isGrounded ? 0.6 : 0.8; }
+                if (Math.abs(this.vx) < 0.1) this.vx = 0;
+
+                // 動態跳躍重力
+                if (keys.justPressedUp && this.isGrounded) {
+                    this.vy = this.jumpForce; this.isGrounded = false; keys.justPressedUp = false;
+                    for(let i=0; i<5; i++) spawnParticle(this.x+this.width/2, this.y+this.height, '#aaa', false);
+                }
+
+                if (this.vy > 0) {
+                    this.vy += this.gravity * this.fallMultiplier; 
+                } else if (this.vy < 0 && !keys.up) {
+                    this.vy += this.gravity * this.lowJumpMultiplier; 
+                } else {
+                    this.vy += this.gravity;
+                }
+                if (this.vy > this.maxFallSpeed) this.vy = this.maxFallSpeed;
+            }
+
+            this.handleCollisions();
+            this.updateState();
+            
+            // 掉落深淵傷害判定 (動態根據攝影機)
+            if (this.y > camera.y + VIEW_HEIGHT + 300) {
+                this.takeDamage(1);
+                // 重置到畫面中央的安全高度 (簡單粗暴的重生)
+                this.y = camera.y + VIEW_HEIGHT/2;
+                this.vy = 0;
+            }
+        }
+
+        handleCollisions() {
+            // 子步進 (Sub-stepping) 解決穿模
+            let steps = Math.ceil(Math.max(Math.abs(this.vx), Math.abs(this.vy)) / 4);
+            if (steps === 0) steps = 1;
+            
+            let stepVx = this.vx / steps;
+            let stepVy = this.vy / steps;
+            
+            let groundedThisFrame = false;
+
+            for (let i = 0; i < steps; i++) {
+                // X軸分步移動與碰撞
+                this.x += stepVx;
+                for (let s of mapData.solids) {
+                    if (this.collide(s)) {
+                        if (stepVx > 0) this.x = s.x - this.width;
+                        else if (stepVx < 0) this.x = s.x + s.width;
+                        this.vx = 0; stepVx = 0; 
+                        this.isDashing = false;
+                    }
+                }
+
+                // Y軸分步移動與碰撞
+                this.y += stepVy;
+                for (let s of mapData.solids) {
+                    if (this.collide(s)) {
+                        if (stepVy > 0) { // 落地
+                            this.y = s.y - this.height;
+                            if (this.vy > 10) camera.shakeTimer = 3; // 重落地微震
+                            groundedThisFrame = true;
+                        } else if (stepVy < 0) { // 撞頭
+                            this.y = s.y + s.height;
+                        }
+                        this.vy = 0; stepVy = 0;
+                    }
+                }
+
+                // 尖刺/危險物碰撞
+                for (let h of mapData.hazards) {
+                    if (this.x + 6 < h.x + h.w && this.x + this.width - 6 > h.x &&
+                        this.y + 12 < h.y + h.h && this.y + this.height > h.y) {
+                        this.takeDamage(1);
+                        this.vy = -8; this.vx = -this.direction * 6; // 受傷擊退
+                        this.isDashing = false; 
+                        return; 
+                    }
+                }
+            }
+
+            this.isGrounded = groundedThisFrame;
+            if (this.isGrounded) this.canDash = true;
+            
+            // 勝利區域判定 (抵達最後的新月祭壇)
+            if (this.x > 4200 && this.y > 3400 && gameState === 'playing') {
+                gameState = 'victory';
+                let screens = document.getElementById('screens');
+                screens.classList.remove('hidden');
+                // 重置所有螢幕
+                document.getElementById('start-screen').classList.add('hidden');
+                document.getElementById('game-over-screen').classList.add('hidden');
+                document.getElementById('victory-screen').classList.remove('hidden');
+            }
+        }
+
+        collide(rect) {
+            return this.x < rect.x + rect.w && this.x + this.width > rect.x &&
+                   this.y < rect.y + rect.h && this.y + this.height > rect.y;
+        }
+
+        updateState() {
+            if (this.isDashing) this.state = 'dash';
+            else if (!this.isGrounded) this.state = this.vy > 0 ? 'fall' : 'jump';
+            else if (Math.abs(this.vx) > 0.5) this.state = 'run';
+            else this.state = 'idle';
+        }
+
+        takeDamage(amount) {
+            if (this.invulnerableTimer > 0) return;
+            this.hp -= amount;
+            this.invulnerableTimer = 60;
+            camera.shakeTimer = 15;
+            updateHUD();
+            
+            for(let i=0; i<20; i++) spawnParticle(this.x+this.width/2, this.y+this.height/2, '#fff', true);
+
+            if (this.hp <= 0) {
+                gameState = 'gameover';
+                let screens = document.getElementById('screens');
+                screens.classList.remove('hidden');
+                // 確保只顯示死亡畫面
+                document.getElementById('start-screen').classList.add('hidden');
+                document.getElementById('victory-screen').classList.add('hidden');
+                document.getElementById('game-over-screen').classList.remove('hidden');
+            }
+        }
+
+        drawPlayerModel(ctx, x, y, dir, isTrail = false, alpha = 1) {
+            const cx = x + this.width/2;
+            const cy = y + this.height/2 + 2; 
+            
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.scale(dir, 1);
+            ctx.globalAlpha = alpha;
+            
+            let t = this.animTimer;
+            let floatY = (this.state === 'idle') ? Math.sin(t*0.5)*1.5 : 0;
+            if(this.state === 'run') floatY = Math.abs(Math.sin(t*1.5))* -3;
+            
+            // --- 斗篷 ---
+            ctx.fillStyle = isTrail ? '#34495e' : '#10141d'; 
+            let capeWave = 0;
+            if (this.state === 'run') capeWave = Math.sin(t*1.5) * 8 - 5;
+            else if (this.state === 'fall' || this.state === 'jump') capeWave = -12;
+            else if (this.state === 'dash') capeWave = -20;
+            
+            ctx.beginPath();
+            ctx.moveTo(-6, -8 + floatY); 
+            ctx.lineTo(8, -8 + floatY);
+            ctx.quadraticCurveTo(15, 5, 12, 18 + floatY); 
+            ctx.lineTo(-8 + capeWave*0.3, 20 + floatY); 
+            ctx.lineTo(-12 + capeWave*0.6, 15 + floatY);
+            ctx.lineTo(-18 + capeWave, 22 + floatY); 
+            ctx.quadraticCurveTo(-15, 0, -6, -8 + floatY); 
+            ctx.fill();
+            
+            if(!isTrail) {
+                ctx.strokeStyle = 'rgba(136, 170, 206, 0.4)';
+                ctx.lineWidth = 1; ctx.stroke();
+            }
+
+            // --- 骨白面具 ---
+            let headTilt = (this.state === 'fall') ? -0.1 : (this.state === 'dash' ? 0.3 : (this.state === 'run' ? 0.1 : 0));
+            ctx.save();
+            ctx.translate(0, -12 + floatY);
+            ctx.rotate(headTilt);
+            
+            ctx.fillStyle = isTrail ? '#bdc3c7' : '#ecf0f1';
+            ctx.beginPath();
+            ctx.moveTo(-10, 5); 
+            ctx.quadraticCurveTo(-12, -5, -6, -10); 
+            ctx.quadraticCurveTo(-15, -25, -2, -18); 
+            ctx.quadraticCurveTo(4, -12, 8, -12); 
+            ctx.quadraticCurveTo(18, -25, 12, -15); 
+            ctx.quadraticCurveTo(14, -2, 8, 8); 
+            ctx.quadraticCurveTo(-2, 10, -10, 5); 
+            ctx.fill();
+            
+            ctx.fillStyle = '#010409';
+            ctx.beginPath();
+            ctx.ellipse(0, -2, 3, 5, -0.2, 0, Math.PI*2); 
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(8, -1, 2, 4, 0.1, 0, Math.PI*2); 
+            ctx.fill();
+            ctx.restore();
+
+            // --- 黑色小腳 ---
+            if (!isTrail) {
+                ctx.fillStyle = '#010409';
+                let leg1Y = 20, leg2Y = 20, leg1X = -4, leg2X = 4;
+                if (this.state === 'run') {
+                    leg1Y += Math.sin(t*1.5)*5; leg1X += Math.cos(t*1.5)*5;
+                    leg2Y += Math.sin(t*1.5 + Math.PI)*5; leg2X += Math.cos(t*1.5 + Math.PI)*5;
+                } else if (this.state === 'jump' || this.state === 'dash') {
+                    leg1Y = 15; leg2Y = 12; leg1X = -6; leg2X = 0;
+                }
+                ctx.beginPath(); ctx.arc(leg1X, leg1Y + floatY, 2.5, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(leg2X, leg2Y + floatY, 2.5, 0, Math.PI*2); ctx.fill();
+            }
+
+            ctx.restore();
+        }
+
+        draw(ctx) {
+            if (this.invulnerableTimer > 0 && Math.floor(Date.now() / 80) % 2 === 0) return;
+
+            const drawX = this.x - camera.getOffsetX();
+            const drawY = this.y - camera.getOffsetY();
+
+            this.trail.forEach(t => {
+                this.drawPlayerModel(ctx, t.x - camera.getOffsetX(), t.y - camera.getOffsetY(), t.dir, true, t.life * 0.5);
+            });
+            this.drawPlayerModel(ctx, drawX, drawY, this.direction);
+        }
+    }
+
+    const mapData = {
+        solids: [], hazards: [], decos: []
+    };
+
+    function buildMetroidvaniaMap() {
+        mapData.solids = []; mapData.hazards = []; mapData.decos = [];
+        
+        const addSolid = (x, y, w, h) => mapData.solids.push({x, y, w, h});
+        const addSpikes = (x, y, w) => mapData.hazards.push({x, y, w, h: 20});
+        const addDeco = (type, x, y, w=0, h=0) => mapData.decos.push({type, x, y, w, h});
+
+        // 系統化區塊設計 (Z字型探索，每層固定高度)
+        const L1 = 400;  // 第一層 (向右)
+        const L2 = 1400; // 第二層 (向左)
+        const L3 = 2600; // 第三層 (向右)
+        const L4 = 3700; // 第四層 (終點)
+
+        // 第一層：被遺忘的迴廊 (向右前進)
+        addSolid(-200, L1, 800, 800); 
+        addDeco('grass', 100, L1, 400); 
+        addDeco('bench', 300, L1); 
+        addDeco('sign_right', 500, L1); 
+
+        addSolid(800, L1, 150, 50); 
+        addSolid(1150, L1, 150, 50); 
+        
+        // 鑿出 1950~2100 的斷崖洞口
+        addSolid(1500, L1, 450, 100); 
+        addDeco('grass', 1500, L1, 400);
+        addDeco('sign_down', 1850, L1); // 指示洞口
+
+        // 第一豎井 (往下掉落)
+        addSolid(2100, 0, 100, 2000); // 右側高牆擋住去路
+        addSolid(1850, L1 + 100, 100, 750); // 修正：豎井左側牆壁 (留出門口高度)
+        addSolid(1500, L2, 700, 100); // 第二層承接底座
+
+        // 第二層：幽暗水脈 (向左前進)
+        addDeco('sign_left', 1600, L2);
+        addSolid(1250, L2, 150, 50);
+        addSolid(950, L2, 150, 50);
+        addDeco('water', 400, L2 + 50, 1100, 150); 
+        addSolid(400, L2 + 100, 1100, 50); 
+        
+        // 鑿出 150~300 的斷崖洞口
+        addSolid(300, L2, 250, 100); 
+        addDeco('grass', 300, L2, 200);
+        addDeco('sign_down', 400, L2); // 指示洞口
+
+        // 第二豎井 (往下掉落)
+        addSolid(50, L2 - 200, 100, 1600); // 左側高牆擋住去路
+        addSolid(300, L2 + 100, 100, 950); // 修正：原本1100會卡死地板，改成950留出往右的門口
+        addSolid(50, L3, 400, 100); // 第三層承接底座
+
+        // 第三層：荊棘試煉與光之祭壇 (向右前進)
+        addDeco('sign_right', 300, L3); 
+        addSpikes(400, L3 + 80, 1600); 
+        addSolid(400, L3 + 100, 1600, 100); 
+        
+        addSolid(550, L3 - 20, 100, 30);  addDeco('chains', 600, L3 - 20);
+        addSolid(850, L3 - 20, 100, 30);  addDeco('chains', 900, L3 - 20);
+        addSolid(1150, L3 - 20, 100, 30); addDeco('chains', 1200, L3 - 20);
+        addSolid(1450, L3 - 20, 100, 30); addDeco('chains', 1500, L3 - 20);
+        addSolid(1750, L3 - 20, 100, 30); addDeco('chains', 1800, L3 - 20);
+
+        // 鑿出 2850~3000 的斷崖洞口
+        addSolid(2000, L3, 850, 100);
+        addDeco('grass', 2000, L3, 750);
+        addDeco('altar', 2400, L3);
+        addDeco('sign_down', 2700, L3);
+
+        // 第三豎井 (前往終點)
+        addSolid(3000, L3 - 100, 100, 1050); // 修正：原本1300會卡死往第四層的路，改為1050留出門口
+        addSolid(2750, L3 + 100, 100, 1100); // 豎井左側牆壁
+        addSolid(2400, L4, 700, 100); // 第四層承接底座
+
+        // 第四層：最終區域 (新月)
+        addDeco('sign_right', 2800, L4); 
+        addSolid(3150, L4, 200, 50);
+        
+        addSolid(3500, L4, 1500, 200); 
+        addDeco('grass', 3500, L4, 1500);
+        addDeco('moon_monument', 4300, L4); 
+    }
+
+    function drawEnvironment(ctx) {
+        ctx.fillStyle = '#050a12';
+        for(let i=0; i<30; i++) {
+            let px = (i * 400 - camera.x * 0.1) % 8000;
+            if (px < -300) px += 8000;
+            let depthFade = Math.max(0, 1 - (camera.y / 5000));
+            ctx.globalAlpha = 0.4 * depthFade;
+            ctx.fillRect(px, 0, 150, VIEW_HEIGHT);
+            ctx.beginPath(); ctx.arc(px+75, 0, 150, 0, Math.PI); ctx.fill(); 
+        }
+        ctx.globalAlpha = 1.0;
+
+        mapData.decos.forEach(d => {
+            const dx = d.x - camera.getOffsetX();
+            const dy = d.y - camera.getOffsetY();
+            if (dx > VIEW_WIDTH + 500 || dx < -500) return; 
+
+            ctx.save();
+            ctx.translate(dx, dy);
+            
+            if (d.type === 'arch') {
+                ctx.fillStyle = '#080d18'; ctx.strokeStyle = '#101825'; ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(0, 0); ctx.lineTo(0, -200);
+                ctx.quadraticCurveTo(75, -280, 150, -200);
+                ctx.lineTo(150, 0);
+                ctx.fill(); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(75, 0); ctx.lineTo(75, -240); ctx.stroke();
+            } 
+            else if (d.type === 'bench') {
+                ctx.fillStyle = '#0f1722';
+                ctx.fillRect(0, -15, 60, 5); 
+                ctx.fillRect(5, -10, 5, 10); ctx.fillRect(50, -10, 5, 10); 
+                ctx.fillRect(0, -35, 5, 20); 
+                ctx.fillRect(-20, -80, 4, 80);
+                ctx.fillStyle = '#dff9fb'; ctx.shadowBlur = 20; ctx.shadowColor = '#81ecec';
+                ctx.beginPath(); ctx.arc(-18, -80, 8, 0, Math.PI*2); ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+            else if (d.type === 'altar') {
+                ctx.fillStyle = '#080d18';
+                ctx.beginPath(); ctx.moveTo(-60, 0); ctx.lineTo(60, 0); ctx.lineTo(40, -40); ctx.lineTo(-40, -40); ctx.fill();
+                let floatY = Math.sin(Date.now()*0.002) * 10;
+                ctx.fillStyle = '#c7ecee'; ctx.shadowBlur = 40; ctx.shadowColor = '#7ed6df';
+                ctx.beginPath(); ctx.moveTo(0, -120 + floatY); ctx.lineTo(20, -80 + floatY); ctx.lineTo(0, -40 + floatY); ctx.lineTo(-20, -80 + floatY); ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+            else if (d.type === 'moon_monument') {
+                ctx.fillStyle = '#f5f6fa'; ctx.shadowBlur = 80; ctx.shadowColor = '#dcdde1';
+                ctx.beginPath();
+                ctx.arc(0, -200, 120, -Math.PI/2, Math.PI*1.5);
+                ctx.arc(30, -210, 100, Math.PI*1.5, -Math.PI/2, true); 
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#050a12';
+                ctx.fillRect(-150, -40, 300, 40);
+                ctx.beginPath(); ctx.moveTo(-200, 0); ctx.lineTo(-180, -150); ctx.lineTo(-150, 0); ctx.fill(); 
+                ctx.beginPath(); ctx.moveTo(150, 0); ctx.lineTo(190, -180); ctx.lineTo(220, 0); ctx.fill(); 
+            }
+            else if (d.type === 'chains') {
+                ctx.strokeStyle = '#2d3436'; ctx.lineWidth = 2;
+                ctx.beginPath();
+                for(let i=0; i<800; i+=15) {
+                    ctx.moveTo(0, -i); ctx.lineTo(0, -i-10);
+                }
+                ctx.stroke();
+            }
+            else if (d.type.startsWith('sign_')) {
+                ctx.fillStyle = '#10141d';
+                ctx.fillRect(-6, -45, 12, 45); 
+                ctx.fillStyle = '#2d3436';
+                ctx.beginPath(); ctx.arc(0, -45, 16, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
+                
+                let dir = d.type.split('_')[1];
+                ctx.fillStyle = '#81ecec';
+                ctx.shadowBlur = 12; ctx.shadowColor = '#81ecec';
+                ctx.beginPath();
+                if (dir === 'right') { 
+                    ctx.moveTo(-6, -52); ctx.lineTo(6, -45); ctx.lineTo(-6, -38);
+                } else if (dir === 'left') { 
+                    ctx.moveTo(6, -52); ctx.lineTo(-6, -45); ctx.lineTo(6, -38);
+                } else if (dir === 'down') { 
+                    ctx.moveTo(-7, -49); ctx.lineTo(0, -37); ctx.lineTo(7, -49);
+                }
+                ctx.fill();
+                ctx.shadowBlur = 0; 
+            }
+            ctx.restore();
+        });
+
+        mapData.solids.forEach(s => {
+            const dx = s.x - camera.getOffsetX();
+            const dy = s.y - camera.getOffsetY();
+            if (dx > VIEW_WIDTH + 200 || dx + s.w < -200 || dy > VIEW_HEIGHT + 200 || dy + s.h < -200) return;
+
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(dx, dy, s.w, s.h);
+            
+            ctx.strokeStyle = 'rgba(129, 236, 236, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(dx, dy); ctx.lineTo(dx + s.w, dy); ctx.stroke();
+
+            ctx.fillStyle = '#000';
+            let seed = s.x; 
+            for(let i = 10; i < s.w - 10; i += 30) {
+                let vH = 20 + (Math.sin(seed + i) * 15);
+                if (vH > 10) {
+                    ctx.beginPath();
+                    ctx.moveTo(dx + i, dy + s.h);
+                    ctx.quadraticCurveTo(dx + i + 5, dy + s.h + vH/2, dx + i + (Math.sin(seed)*10), dy + s.h + vH);
+                    ctx.quadraticCurveTo(dx + i - 5, dy + s.h + vH/2, dx + i - 5, dy + s.h);
+                    ctx.fill();
+                }
+            }
+        });
+
+        mapData.decos.filter(d => d.type === 'grass').forEach(d => {
+            const dx = d.x - camera.getOffsetX();
+            const dy = d.y - camera.getOffsetY();
+            if (dx > VIEW_WIDTH || dx + d.w < 0 || dy > VIEW_HEIGHT || dy < -100) return;
+
+            let seed = d.x;
+            ctx.lineWidth = 1.5;
+            for(let i = 5; i < d.w - 5; i += 12) {
+                let pType = Math.sin(seed + i);
+                let px = dx + i;
+                
+                if (pType > 0.6) {
+                    let h = 15 + Math.sin(i)*10;
+                    ctx.strokeStyle = '#2d3436';
+                    ctx.beginPath(); ctx.moveTo(px, dy); ctx.quadraticCurveTo(px-5, dy-h/2, px-2, dy-h); ctx.stroke();
+                    ctx.fillStyle = '#c7ecee'; ctx.shadowBlur = 8; ctx.shadowColor = '#81ecec';
+                    ctx.beginPath(); ctx.arc(px-2, dy-h, 2.5, 0, Math.PI*2); ctx.fill();
+                    ctx.shadowBlur = 0;
+                } else {
+                    ctx.strokeStyle = '#000';
+                    ctx.beginPath(); ctx.moveTo(px, dy); ctx.quadraticCurveTo(px+(Math.cos(i)*5), dy-8, px+(Math.sin(i)*8), dy-12); ctx.stroke();
+                }
+            }
+        });
+
+        mapData.decos.filter(d => d.type === 'water').forEach(d => {
+            const dx = d.x - camera.getOffsetX();
+            const dy = d.y - camera.getOffsetY();
+            if (dx > VIEW_WIDTH || dx + d.w < 0 || dy > VIEW_HEIGHT || dy < -100) return;
+
+            let t = Date.now() * 0.002;
+            let waveY = Math.sin(dx * 0.01 + t) * 4;
+            
+            let grad = ctx.createLinearGradient(0, dy + waveY, 0, dy + d.h);
+            grad.addColorStop(0, 'rgba(72, 126, 176, 0.4)');
+            grad.addColorStop(1, 'rgba(25, 42, 86, 0.8)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(dx, dy + waveY, d.w, d.h - waveY);
+            
+            ctx.fillStyle = 'rgba(129, 236, 236, 0.3)';
+            ctx.fillRect(dx, dy + waveY, d.w, 3);
+        });
+
+        mapData.hazards.forEach(h => {
+            const dx = h.x - camera.getOffsetX();
+            const dy = h.y - camera.getOffsetY();
+            if (dx > VIEW_WIDTH || dx + h.w < 0 || dy > VIEW_HEIGHT || dy < -100) return;
+
+            ctx.fillStyle = '#000'; 
+            ctx.strokeStyle = '#bdc3c7'; 
+            ctx.lineWidth = 1;
+            
+            ctx.beginPath();
+            for(let i=0; i<h.w; i+=12) {
+                ctx.moveTo(dx + i, dy + h.h); 
+                ctx.lineTo(dx + i + 6, dy);   
+                ctx.lineTo(dx + i + 12, dy + h.h); 
+            }
+            ctx.fill(); ctx.stroke();
+        });
+    }
+
+    let particles = [];
+    let ambientSpores = []; 
+
+    function spawnParticle(x, y, color, explode = false) {
+        let ang = Math.random() * Math.PI * 2;
+        let spd = Math.random() * (explode ? 5 : 1.5);
+        particles.push({
+            x: x, y: y,
+            vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+            life: 1.0, decay: Math.random() * 0.05 + 0.02,
+            color: color, size: Math.random() * 2 + 1
+        });
+    }
+
+    for(let i=0; i<60; i++) {
+        ambientSpores.push({
+            x: Math.random() * 8000, y: Math.random() * 4000,
+            s: Math.random() * 1.5 + 0.5, a: Math.random() * Math.PI*2,
+            speed: Math.random() * 0.02 + 0.01
+        });
+    }
+
+    function updateAndDrawParticles(ctx) {
+        ctx.fillStyle = 'rgba(136, 170, 206, 0.4)';
+        ambientSpores.forEach(s => {
+            s.a += s.speed;
+            let drawX = (s.x - camera.x * 0.6) % 8000;
+            if (drawX < -100) drawX += 8000;
+            let drawY = s.y - camera.y * 0.6 + Math.sin(s.a)*15;
+            
+            if (drawX > -10 && drawX < VIEW_WIDTH + 10 && drawY > -10 && drawY < VIEW_HEIGHT + 10) {
+                ctx.beginPath(); ctx.arc(drawX, drawY, s.s, 0, Math.PI*2); ctx.fill();
+            }
+        });
+
+        for (let i = particles.length - 1; i >= 0; i--) {
+            let p = particles[i];
+            p.x += p.vx; p.y += p.vy; p.life -= p.decay;
+            
+            let drawX = p.x - camera.getOffsetX();
+            let drawY = p.y - camera.getOffsetY();
+            
+            if(p.life > 0 && drawX > -10 && drawX < VIEW_WIDTH+10 && drawY > -10 && drawY < VIEW_HEIGHT+10) {
+                ctx.globalAlpha = p.life;
+                ctx.fillStyle = p.color;
+                ctx.beginPath(); ctx.arc(drawX, drawY, p.size, 0, Math.PI*2); ctx.fill();
+            }
+            if (p.life <= 0) particles.splice(i, 1);
+        }
+        ctx.globalAlpha = 1.0;
+    }
+
+    let player;
+    let gameState = 'start';
+
+    function initGame() {
+        buildMetroidvaniaMap();
+        player = new Player();
+        particles = [];
+        
+        camera.x = player.x - VIEW_WIDTH/2;
+        camera.y = player.y - VIEW_HEIGHT/2;
+
+        updateHUD();
+        gameState = 'playing';
+        
+        // 隱藏所有選單螢幕，開啟遊戲
+        let screens = document.getElementById('screens');
+        screens.classList.add('hidden');
+        document.getElementById('start-screen').classList.add('hidden');
+        document.getElementById('game-over-screen').classList.add('hidden');
+        document.getElementById('victory-screen').classList.add('hidden');
+        
+        // 顯示右上角重來按鈕
+        document.getElementById('ingame-restart').classList.remove('hidden');
+        
+        Object.keys(keys).forEach(k => keys[k] = false);
+    }
+
+    function updateHUD() {
+        for(let i=1; i<=5; i++) {
+            let mask = document.getElementById(`hp-${i}`);
+            if(i <= player.hp) mask.classList.remove('empty');
+            else mask.classList.add('empty');
+        }
+    }
+
+    function drawBaseBackground() {
+        let depthRatio = Math.min(1, Math.max(0, camera.y / 4000)); 
+        let topColor = `rgb(${11 - depthRatio*11}, ${20 - depthRatio*15}, ${38 - depthRatio*20})`;
+        let bottomColor = `#010409`;
+        
+        let grad = ctx.createRadialGradient(VIEW_WIDTH/2, VIEW_HEIGHT*0.3, 100, VIEW_WIDTH/2, VIEW_HEIGHT/2, VIEW_WIDTH);
+        grad.addColorStop(0, topColor);
+        grad.addColorStop(1, bottomColor);
+        
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
+        
+        let vignette = ctx.createRadialGradient(VIEW_WIDTH/2, VIEW_HEIGHT/2, VIEW_HEIGHT*0.4, VIEW_WIDTH/2, VIEW_HEIGHT/2, VIEW_WIDTH);
+        vignette.addColorStop(0, 'rgba(0,0,0,0)');
+        vignette.addColorStop(1, 'rgba(0,0,0,0.8)');
+        ctx.fillStyle = vignette;
+        ctx.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
+    }
+
+    function gameLoop() {
+        requestAnimationFrame(gameLoop);
+        
+        if (gameState === 'start' && mapData.solids.length === 0) {
+            buildMetroidvaniaMap();
+            player = new Player();
+            player.x = 300; player.y = 400 - player.height; 
+            camera.x = player.x - VIEW_WIDTH/2;
+            camera.y = player.y - VIEW_HEIGHT/2;
+        }
+
+        drawBaseBackground();
+
+        if (gameState === 'playing') {
+            player.update();
+            camera.follow(player);
+            camera.updateShake();
+        }
+
+        drawEnvironment(ctx);
+        if (gameState !== 'gameover') player.draw(ctx);
+        updateAndDrawParticles(ctx);
+        
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.fillRect(0, VIEW_HEIGHT-30, VIEW_WIDTH, 30);
+    }
+
+    // 綁定按鈕
+    document.getElementById('start-btn').addEventListener('click', initGame);
+    document.getElementById('restart-btn').addEventListener('click', initGame);
+    document.getElementById('win-restart-btn').addEventListener('click', initGame);
+    
+    // 綁定右上角快速重來按鈕
+    const ingameRestart = document.getElementById('ingame-restart');
+    ingameRestart.addEventListener('click', initGame);
+    ingameRestart.addEventListener('touchstart', (e) => { e.preventDefault(); initGame(); }, {passive: false});
+
+    gameLoop();
+
+</script>
+</body>
+</html>
